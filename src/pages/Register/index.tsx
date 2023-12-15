@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { format, formatISO, parse } from "date-fns";
+import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -28,35 +28,75 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ptBR } from "date-fns/locale";
+import { useForm, SubmitHandler } from "react-hook-form";
+import { BiDetail } from "react-icons/bi";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useInvoice } from "@/contexts/hooks/Invoice";
+
+interface UIData {
+  date: string;
+  name: string;
+  obs: string;
+  tranches: number;
+  value: number;
+  card: string;
+}
 
 export default function Register() {
-  const [date, setDate] = useState<Date>();
+  const { listDataId, RegisterInvoice, UpdateInvoice, update } = useInvoice();
+  const [dateCalend, setDateCalend] = useState<Date>();
+  const [selected, setSelected] = useState("");
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const name = data.get("name");
-    const card = data.get("card");
-    const tranches = data.get("tranches");
-    const value = data.get("value");
-    const obs = data.get("obs");
+  const { state } = useLocation();
+  const navigate = useNavigate();
 
-    let newDate = "";
-    if (date) {
-      const dateString = format(date, "dd/MM/yyyy");
-      const dataObj = parse(dateString, "dd/MM/yyyy", new Date());
+  const { register, handleSubmit, setValue, reset } = useForm<UIData>();
 
-      newDate = formatISO(dataObj);
+  useEffect(() => {
+    reset(listDataId);
+    setDateCalend(listDataId ? new Date(listDataId.date) : undefined);
+    setSelected(listDataId?.card || "");
+
+    if (update) {
+      reset();
+      setDateCalend(undefined);
+      setSelected("");
     }
+  }, [listDataId, reset, update]);
 
-    console.log(name, card, tranches, value, obs, newDate);
-  }
+  const handleSelect = (value: string) => {
+    setValue("card", value);
+    setSelected(value);
+  };
+
+  const onSubmit: SubmitHandler<UIData> = async (data: UIData) => {
+    const formattedData = {
+      ...data,
+      name: data.name.charAt(0).toUpperCase() + data.name.slice(1),
+      tranches: Number(data.tranches),
+      value: Number(data.value),
+      date: dateCalend ? new Date(dateCalend).toISOString() : "",
+    };
+
+    if (listDataId) {
+      UpdateInvoice(formattedData, state);
+      navigate("/");
+    } else {
+      RegisterInvoice(formattedData);
+      reset();
+    }
+  };
 
   return (
     <div className="flex justify-center items-center h-screen">
-      <form onSubmit={submit}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <Tabs defaultValue="account" className="w-[400px]">
           <TabsContent value="account">
+            <div className="relative">
+              <Link to="/">
+                <BiDetail className="absolute top-3 right-10 h-8 w-8" />
+              </Link>
+            </div>
             <Card>
               <CardHeader className="flex items-center">
                 <CardTitle>Adicionar Compras</CardTitle>
@@ -64,11 +104,15 @@ export default function Register() {
               <CardContent className="space-y-2">
                 <div className="space-y-1">
                   <Label htmlFor="name">Nome</Label>
-                  <Input id="name" name="name" />
+                  <Input id="name" {...register("name")} />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="card">Cartão</Label>
-                  <Select name="card">
+                  <Select
+                    {...register("card")}
+                    value={selected}
+                    onValueChange={handleSelect}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -81,7 +125,11 @@ export default function Register() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="tranches">Parcelas</Label>
-                  <Input type="number" id="tranches" name="tranches" />
+                  <Input
+                    type="number"
+                    id="tranches"
+                    {...register("tranches")}
+                  />
                 </div>
                 <div className="space-y-1 grid gap-1 grid-cols-1 grid-rows-1">
                   <Label htmlFor="date">Data</Label>
@@ -91,12 +139,12 @@ export default function Register() {
                         variant={"outline"}
                         className={cn(
                           "w-[325px] justify-start text-left font-normal",
-                          !date && "text-muted-foreground"
+                          !dateCalend && "text-muted-foreground"
                         )}
                       >
                         <CalendarIcon className="mr-2 h-4 w-4" />
-                        {date ? (
-                          format(date, "dd/MM/yyyy", { locale: ptBR })
+                        {dateCalend ? (
+                          format(dateCalend, "dd/MM/yyyy", { locale: ptBR })
                         ) : (
                           <span>Selecione a data</span>
                         )}
@@ -104,9 +152,10 @@ export default function Register() {
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
                       <Calendar
+                        id="date"
                         mode="single"
-                        selected={date}
-                        onSelect={setDate}
+                        selected={dateCalend}
+                        onSelect={setDateCalend}
                         initialFocus
                         locale={ptBR}
                       />
@@ -116,19 +165,26 @@ export default function Register() {
                 <div className="space-y-1">
                   <Label htmlFor="value">Valor</Label>
                   <Input
-                    type="number"
                     id="value"
-                    name="value"
-                    defaultValue="Ex.: 1000"
+                    type="text"
+                    {...register("value", {
+                      validate: {
+                        validNumber: (value) =>
+                          !isNaN(Number(value)) || "Invalid number",
+                      },
+                    })}
+                    placeholder="Ex.: 1000.75"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="obs">Observação</Label>
-                  <Textarea name="obs" />
+                  <Textarea {...register("obs")} />
                 </div>
               </CardContent>
               <CardFooter className="space-y-1">
-                <Button type="submit">Salvar</Button>
+                <Button type="submit">
+                  {listDataId ? "Atualizar" : "Salvar"}
+                </Button>
               </CardFooter>
             </Card>
           </TabsContent>
