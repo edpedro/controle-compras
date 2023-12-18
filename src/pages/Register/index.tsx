@@ -32,6 +32,8 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { BiDetail } from "react-icons/bi";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useInvoice } from "@/contexts/hooks/Invoice";
+import { useLoading } from "@/contexts/hooks/Loanding";
+import Loading from "@/components/loading";
 
 interface UIData {
   date: string;
@@ -46,6 +48,8 @@ export default function Register() {
   const { listDataId, RegisterInvoice, UpdateInvoice, update } = useInvoice();
   const [dateCalend, setDateCalend] = useState<Date>();
   const [selected, setSelected] = useState("");
+
+  const { isLoadingFetch } = useLoading();
 
   const { state } = useLocation();
   const navigate = useNavigate();
@@ -86,6 +90,14 @@ export default function Register() {
       reset();
     }
   };
+
+  if (isLoadingFetch) {
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <Loading />
+      </div>
+    );
+  }
 
   return (
     <div className="flex justify-center items-center h-screen">
